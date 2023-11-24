@@ -1,0 +1,6 @@
+.vs
+bin
+StudentsApi.csproj.user
+obj
+Properties
+StudentsApi.http

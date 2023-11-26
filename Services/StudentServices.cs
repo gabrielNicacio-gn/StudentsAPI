@@ -4,6 +4,8 @@ using StudentsApi.Data;
 using StudentsApi.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualBasic;
 
 namespace StudentsApi.Services
 {
@@ -15,46 +17,64 @@ namespace StudentsApi.Services
             _studentContext = studentContext;
         }
 
-        public Student CreateNewStudent(CreateStudent createStudent)
+        public async Task<ResultOfCreatingStudents> CreateNewStudentAsync(CreateStudent createStudent)
         {
             var newStudent = new Student(createStudent.Name,createStudent.Registration,createStudent.Email);
+            var exist = _studentContext.Students.Any(studentExist => studentExist.Name == newStudent.Name && 
+            studentExist.Registration == newStudent.Registration && 
+            studentExist.Email == newStudent.Email);
+            if (exist)
+            {
+                return new ResultOfCreatingStudents("Esse estudante já existe");
+            }
             _studentContext.Students.Add(newStudent);
-            _studentContext.SaveChanges();
-            return newStudent;
+            await _studentContext.SaveChangesAsync();
+            return new ResultOfCreatingStudents(newStudent.Id);
         }
-        public IEnumerable<Student> GetStudentsAll()
+        public async Task<IQueryable<ReturnStudents> >GetStudentsAll()
         {
-            return _studentContext.Students
-                .ToList()
-                .Where(st=>st.IsActive);
+            var listStudent = await _studentContext.Students
+                .Where(st => st.IsActive)
+                .Select(studentResult => new ReturnStudents(studentResult.Id, studentResult.Name, studentResult.Registration, studentResult.Email))
+                .ToListAsync();
+            return listStudent.AsQueryable();
         }
-        public Student? GetStudentsById(Guid id)
+        public async Task<ReturnStudents?> GetStudentsByIdAsync(Guid id)
         {
-            var student = _studentContext.Students.SingleOrDefault(st=>st.Id == id);
-            if (student is not null)
-                return student;
-                
-            return null;
+            var student = await _studentContext.Students
+                .Where(st => st.Id == id && st.IsActive)
+                .Select(student => new ReturnStudents(student.Id, student.Name, student.Registration, student.Email))
+                .SingleOrDefaultAsync();
+
+            return student;
         }
-        public void DeleteStudent(Guid id)
+        public async Task<ResultOfStudentsDeletion> DeleteStudentAsync(Guid id)
         {
-           var studentRemove = _studentContext.Students.SingleOrDefault(st => st.Id == id);
-           if(studentRemove is not null)
-           {
-                studentRemove.Inactivate();
-           }    _studentContext.SaveChanges(); 
+            var studentRemove = await _studentContext.Students
+                 .Where(st=>st.Id == id && st.IsActive)
+                 .SingleOrDefaultAsync();
+            if(studentRemove is null)
+            {
+                return new ResultOfStudentsDeletion("Este aluno não foi encontrado");
+            }
+            studentRemove.Inactivate();
+            await _studentContext.SaveChangesAsync();
+            return new ResultOfStudentsDeletion("");
         }
 
-        public Student? UpdateStudent(Guid id, UpdateStudent updateStudent)
+        public async Task<ResultOfStudentsUpdate> UpdateStudentAsync(Guid id, UpdateStudent updateStudent)
         {
-            var studentUpdate = _studentContext.Students.SingleOrDefault(st => st.Id == id);
-            if( studentUpdate is not null)
+            var studentUpdate = await _studentContext.Students
+                .Where(st => st.Id == id && st.IsActive)
+                .SingleOrDefaultAsync();
+            if(studentUpdate is null) 
             {
-                studentUpdate.UpdateStudent(updateStudent.Name, updateStudent.Registration, updateStudent.Email);
-                _studentContext.SaveChanges();
-                return studentUpdate;
+                return new ResultOfStudentsUpdate("Esse estudante não foi encontrado");
             }
-            return null;
+            studentUpdate.UpdateStudent(updateStudent.Name,updateStudent.Registration,studentUpdate.Email);
+            await _studentContext.SaveChangesAsync();
+            var studentUpdateReturn = new ReturnStudents(studentUpdate.Id, studentUpdate.Name, studentUpdate.Registration, studentUpdate.Email);
+            return new ResultOfStudentsUpdate(studentUpdateReturn);
         }
     }
 }

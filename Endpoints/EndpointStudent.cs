@@ -5,6 +5,7 @@ using StudentsApi.DTOs;
 using StudentsApi.Services;
 using StudentsApi.ViewModel;
 using StudentsApi.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace StudentsApi.Endpoints
 {
@@ -14,59 +15,53 @@ namespace StudentsApi.Endpoints
         {
             var endpoint = app.MapGroup("estudantes");
 
-            endpoint.MapPost("",(CreateStudent create, StudentServices _studentsServices) =>
+            endpoint.MapPost("",async (CreateStudent create, StudentServices _studentsServices) =>
             {
-                var exist = _studentsServices.GetStudentsAll().Any(st => st.Name == create.Name && st.Registration == create.Registration && st.Email == create.Email);
-                if (exist)
+                var student = await _studentsServices.CreateNewStudentAsync(create);
+                if(!string.IsNullOrEmpty(student.ErrorMessage))
                 {
-                    return Results.Conflict("Já existe");
+                    return Results.Conflict(student.ErrorMessage);
                 }
-                var student =_studentsServices.CreateNewStudent(create);
-                var studentCreate = new StudentDTO(student.Id,student.Name,student.Registration,student.Email);
-                return Results.Ok(studentCreate);
+                var result = new {student.Id};
+                return Results.Ok(result);
             });
-            endpoint.MapGet("",(StudentServices _studentServices) =>
+            
+            endpoint.MapGet("",async (StudentServices _studentServices) =>
             {
-                var students = _studentServices.GetStudentsAll()
-                .Select(studentResult=>new StudentDTO(studentResult.Id,studentResult.Name,studentResult.Registration,studentResult.Email));
+                var students = await _studentServices.GetStudentsAll();
                 return Results.Ok(students);
             });
-            endpoint.MapGet("{id}", (Guid id, StudentServices _studentServices) =>
+            
+            endpoint.MapGet("{id}", async (Guid id, StudentServices _studentServices) =>
             {
-                var student = _studentServices.GetStudentsById(id);
+                var student = await _studentServices.GetStudentsByIdAsync(id);
                 if(student is not null)
-                {
-                    var studentResult = new StudentDTO(student.Id, student.Name, student.Registration, student.Email);
-                    return Results.Ok(studentResult);
-                }
-                return Results.NotFound(id);
-            });
-            endpoint.MapPut("{id}",(Guid id, UpdateStudent updateStudent,StudentServices _studentsServices) =>
-            {
-                var studentExist = _studentsServices.GetStudentsById(id);
-                if(studentExist is not null)
-                {
-                    var studentUpdate = _studentsServices.UpdateStudent(id,updateStudent);
-                    if(studentUpdate is not null)
-                    {
-                        var studentResult = new StudentDTO(studentUpdate.Id, studentUpdate.Name, studentUpdate.Registration, studentUpdate.Email);
-                        return Results.Ok(studentResult);
-                    }
-                }
-                return Results.NotFound(id);
-            });
+                    return Results.Ok(student);
 
-            endpoint.MapDelete("{id}",(Guid id,StudentServices _studentServices)=> 
-            {
-                var studentExist = _studentServices.GetStudentsById(id);
-                if(studentExist is not null)
-                {
-                    _studentServices.DeleteStudent(id);
-                    return Results.NoContent();
-                }
                 return Results.NotFound(id);
             });
-
+            
+            endpoint.MapPut("{id}", async(Guid id, UpdateStudent updateStudent,StudentServices _studentsServices) =>
+            {
+                var studentExist = await _studentsServices.UpdateStudentAsync(id,updateStudent);
+                if (!string.IsNullOrEmpty(studentExist.ErrorMessage))
+                {
+                    return Results.NotFound(studentExist.ErrorMessage);
+                }
+                var result = new {studentExist.Return.Id,studentExist.Return.Name,studentExist.Return.Registration,studentExist.Return.Email};
+                return Results.Ok(result);
+            });
+            
+            endpoint.MapDelete("{id}",async (Guid id,StudentServices _studentServices)=> 
+            {
+                var studentExist = await _studentServices.DeleteStudentAsync(id);
+                if (!string.IsNullOrEmpty(studentExist.ErrorMessage))
+                {
+                    return Results.NotFound(id);
+                }
+                return Results.NoContent();
+            });
+            
         }
     }
 }
